@@ -1,12 +1,13 @@
-// src/components/charts/MonthlyRevenueChart.jsx
 import {
-  LineChart,
+  ComposedChart,
+  Bar,
   Line,
   XAxis,
   YAxis,
   CartesianGrid,
   Tooltip,
   ResponsiveContainer,
+  Legend,
 } from "recharts";
 
 const MONTH_NAMES = [
@@ -20,20 +21,37 @@ const money = (v) =>
     maximumFractionDigits: 2,
   })}`;
 
-// ── Custom tooltip ────────────────────────────────────────────
+// ── Custom Tooltip ────────────────────────────────────────────
 const CustomTooltip = ({ active, payload, label }) => {
   if (!active || !payload?.length) return null;
   return (
-    <div className="rounded-xl border border-white/10 bg-slate-800/95 px-3 py-2 shadow-xl backdrop-blur-sm">
-      <p className="mb-1 text-xs font-semibold text-slate-400">{label}</p>
-      <p className="text-sm font-bold text-white">{money(payload[0].value)}</p>
+    <div className="rounded-xl border border-white/10 bg-slate-800/95 px-4 py-3 shadow-xl backdrop-blur-sm">
+      <p className="mb-2 text-xs font-semibold text-slate-400">{label}</p>
+      {payload.map((entry) => (
+        <p key={entry.name} className="text-sm font-bold" style={{ color: entry.color }}>
+          {entry.name === "Revenue" ? money(entry.value) : money(entry.value)}
+        </p>
+      ))}
     </div>
   );
 };
 
-// ── Parse raw API data into Recharts format ───────────────────
-// Input:  [{ yr: 2026, mo: 5, total: "12000.00" }]
-// Output: [{ yr: 2026, mo: 5, total: 12000, label: "May" }]
+// ── Custom Legend ─────────────────────────────────────────────
+const CustomLegend = () => (
+  <div className="mt-3 flex items-center justify-center gap-6">
+    <div className="flex items-center gap-2">
+      <div className="h-3 w-3 rounded-sm bg-indigo-500 opacity-80" />
+      <span className="text-xs text-slate-400">Monthly Revenue</span>
+    </div>
+    <div className="flex items-center gap-2">
+      <div className="h-0.5 w-6 bg-violet-400" />
+      <div className="h-2 w-2 rounded-full bg-violet-400" />
+      <span className="text-xs text-slate-400">Trend</span>
+    </div>
+  </div>
+);
+
+// ── Parse raw API data ────────────────────────────────────────
 export const parseMonthlyData = (raw = []) =>
   raw.map((m) => ({
     yr:    parseInt(m.yr),
@@ -42,17 +60,13 @@ export const parseMonthlyData = (raw = []) =>
     label: MONTH_NAMES[parseInt(m.mo) - 1] ?? String(m.mo),
   }));
 
-// ── The shared chart component ────────────────────────────────
-// Props:
-//   monthlyRevenue  — raw array from stats.monthlyRevenue (API response)
-//   loading         — boolean, shows spinner while data loads
-//   height          — optional chart height in px (default 200)
+// ── Main Chart Component ──────────────────────────────────────
 export default function MonthlyRevenueChart({
   monthlyRevenue = [],
   loading        = false,
-  height         = 200,
+  height         = 220,
 }) {
-  const monthly    = parseMonthlyData(monthlyRevenue);
+  const monthly       = parseMonthlyData(monthlyRevenue);
   const sixMonthTotal = monthly.reduce((sum, m) => sum + m.total, 0);
 
   // ── Loading state ─────────────────────────────────────────
@@ -80,30 +94,29 @@ export default function MonthlyRevenueChart({
     );
   }
 
-  // ── Chart ─────────────────────────────────────────────────
   return (
     <div>
       <ResponsiveContainer width="100%" height={height}>
-        <LineChart
+        <ComposedChart
           data={monthly}
-          margin={{ top: 12, right: 12, left: 0, bottom: 0 }}
+          margin={{ top: 12, right: 16, left: 0, bottom: 0 }}
         >
-          {/* Gradient definition — indigo → violet */}
           <defs>
-            <linearGradient id="revenueLineGradient" x1="0" y1="0" x2="1" y2="0">
-              <stop offset="0%"   stopColor="#6366f1" stopOpacity={1} />
-              <stop offset="100%" stopColor="#8b5cf6" stopOpacity={1} />
+            {/* Bar gradient — indigo */}
+            <linearGradient id="barGradient" x1="0" y1="0" x2="0" y2="1">
+              <stop offset="0%"   stopColor="#6366f1" stopOpacity={0.9} />
+              <stop offset="100%" stopColor="#4338ca" stopOpacity={0.6} />
             </linearGradient>
           </defs>
 
-          {/* Horizontal grid lines only */}
+          {/* Grid */}
           <CartesianGrid
             strokeDasharray="3 3"
             stroke="rgba(255,255,255,0.05)"
             vertical={false}
           />
 
-          {/* X-axis — shows month names like Jan, Feb */}
+          {/* X-axis — month names */}
           <XAxis
             dataKey="label"
             tick={{ fill: "#64748b", fontSize: 11 }}
@@ -111,8 +124,22 @@ export default function MonthlyRevenueChart({
             tickLine={false}
           />
 
-          {/* Y-axis — shows ₱ formatted amounts */}
+          {/* Left Y-axis — bar amounts */}
           <YAxis
+            yAxisId="left"
+            tick={{ fill: "#64748b", fontSize: 10 }}
+            axisLine={false}
+            tickLine={false}
+            width={60}
+            tickFormatter={(v) =>
+              v >= 1000 ? `₱${(v / 1000).toFixed(0)}k` : `₱${v}`
+            }
+          />
+
+          {/* Right Y-axis — line trend amounts */}
+          <YAxis
+            yAxisId="right"
+            orientation="right"
             tick={{ fill: "#64748b", fontSize: 10 }}
             axisLine={false}
             tickLine={false}
@@ -125,32 +152,47 @@ export default function MonthlyRevenueChart({
           {/* Hover tooltip */}
           <Tooltip
             content={<CustomTooltip />}
-            cursor={{ stroke: "rgba(255,255,255,0.08)", strokeWidth: 1 }}
+            cursor={{ fill: "rgba(255,255,255,0.03)" }}
           />
 
-          {/* The line itself */}
+          {/* Blue bars — monthly revenue */}
+          <Bar
+            yAxisId="left"
+            dataKey="total"
+            name="Revenue"
+            fill="url(#barGradient)"
+            radius={[6, 6, 0, 0]}
+            maxBarSize={48}
+          />
+
+          {/* Violet trend line on top of bars */}
           <Line
+            yAxisId="right"
             type="monotone"
             dataKey="total"
-            stroke="url(#revenueLineGradient)"
+            name="Trend"
+            stroke="#a78bfa"
             strokeWidth={2.5}
             dot={{
-              fill:        "#8b5cf6",
+              fill:        "#a78bfa",
               r:           4,
               strokeWidth: 2,
               stroke:      "#0f172a",
             }}
             activeDot={{
               r:           6,
-              fill:        "#a78bfa",
+              fill:        "#c4b5fd",
               stroke:      "#0f172a",
               strokeWidth: 2,
             }}
           />
-        </LineChart>
+        </ComposedChart>
       </ResponsiveContainer>
 
-      {/* 6-month total summary below chart */}
+      {/* Custom legend */}
+      <CustomLegend />
+
+      {/* 6-month total */}
       <p className="mt-3 text-right text-xs text-slate-600">
         6-month total:{" "}
         <span className="font-semibold text-slate-400">
