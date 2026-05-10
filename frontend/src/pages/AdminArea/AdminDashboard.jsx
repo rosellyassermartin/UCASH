@@ -1,4 +1,8 @@
 import { useCallback, useEffect, useState } from "react";
+import {
+  LineChart, Line, XAxis, YAxis, CartesianGrid,
+  Tooltip, ResponsiveContainer, defs, linearGradient, stop
+} from "recharts";
 import { adminAPI, transactionAPI } from "../../api.js";
 
 const money = (v) =>
@@ -14,7 +18,7 @@ const STATUS_STYLES = {
 
 const MONTH_NAMES = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
 
-const STAT_CARDS = (stats, loading) => [
+const STAT_CARDS = (stats) => [
   {
     label: "Total Revenue",
     value: money(stats?.totalRevenue),
@@ -44,6 +48,17 @@ const STAT_CARDS = (stats, loading) => [
     text: "text-violet-300",
   },
 ];
+
+// ── Custom tooltip for the chart ──────────────────────────────
+const CustomTooltip = ({ active, payload, label }) => {
+  if (!active || !payload?.length) return null;
+  return (
+    <div className="rounded-xl border border-white/10 bg-slate-800/95 px-3 py-2 shadow-xl backdrop-blur-sm">
+      <p className="mb-1 text-xs font-semibold text-slate-400">{label}</p>
+      <p className="text-sm font-bold text-white">{money(payload[0].value)}</p>
+    </div>
+  );
+};
 
 export default function AdminDashboard({ onNavigate }) {
   const [stats, setStats]                   = useState(null);
@@ -78,7 +93,7 @@ export default function AdminDashboard({ onNavigate }) {
     return () => window.removeEventListener("ucash:data-changed", handler);
   }, [loadData]);
 
-  // Parse monthly data cleanly — convert all values to proper numbers
+  // Parse monthly data for Recharts
   const monthly = (stats?.monthlyRevenue || []).map((m) => ({
     yr:    parseInt(m.yr),
     mo:    parseInt(m.mo),
@@ -86,9 +101,7 @@ export default function AdminDashboard({ onNavigate }) {
     label: MONTH_NAMES[parseInt(m.mo) - 1] ?? String(m.mo),
   }));
 
-  // Calculate max AFTER parsing so it's always accurate
-  const maxRevenue = Math.max(...monthly.map((m) => m.total), 1);
-  const statCards  = STAT_CARDS(stats, loading);
+  const statCards = STAT_CARDS(stats);
 
   return (
     <div className="min-h-screen space-y-5 p-4 sm:p-6">
@@ -139,7 +152,7 @@ export default function AdminDashboard({ onNavigate }) {
       {/* Two-column grid: chart + pending */}
       <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
 
-        {/* Monthly Revenue Bar Chart */}
+        {/* Monthly Revenue Line Chart */}
         <div className="rounded-3xl border border-white/[0.07] bg-white/[0.02] p-5 backdrop-blur-sm">
           <div className="mb-5 flex items-center justify-between">
             <p className="font-semibold text-white">Monthly Revenue</p>
@@ -152,50 +165,62 @@ export default function AdminDashboard({ onNavigate }) {
           </div>
 
           {loading ? (
-            // Skeleton bars while loading
-            <div className="flex h-36 items-end gap-1.5">
-              {[60, 80, 45, 90, 70, 55].map((h, i) => (
-                <div key={i} className="flex flex-1 flex-col items-center gap-1.5">
-                  <div
-                    className="w-full rounded-t-lg bg-white/[0.05] animate-pulse"
-                    style={{ height: `${h}px` }}
-                  />
-                  <span className="h-2 w-4 rounded bg-white/[0.05] animate-pulse" />
-                </div>
-              ))}
+            <div className="flex h-44 items-center justify-center">
+              <div className="h-8 w-8 animate-spin rounded-full border-2 border-indigo-500 border-t-transparent" />
             </div>
           ) : monthly.length === 0 ? (
-            <p className="text-sm text-slate-500">No revenue data yet.</p>
+            <div className="flex h-44 items-center justify-center">
+              <p className="text-sm text-slate-500">No revenue data yet.</p>
+            </div>
           ) : (
             <>
-              <div className="flex h-36 items-end gap-1.5">
-                {monthly.map((m) => {
-                  // Clamp minimum height to 4px so zero months still show a sliver
-                  const barHeight = Math.max(4, (m.total / maxRevenue) * 130);
-                  return (
-                    <div
-                      key={`${m.yr}-${m.mo}`}
-                      className="group relative flex flex-1 flex-col items-center gap-1.5"
-                    >
-                      {/* Tooltip on hover */}
-                      <div className="pointer-events-none absolute -top-8 left-1/2 -translate-x-1/2 whitespace-nowrap rounded-lg border border-white/10 bg-slate-800 px-2 py-1 text-[10px] text-white opacity-0 transition group-hover:opacity-100">
-                        {money(m.total)}
-                      </div>
-                      <div
-                        className="w-full rounded-t-lg bg-gradient-to-t from-indigo-600 to-violet-500 opacity-80 transition-all duration-300 group-hover:opacity-100"
-                        style={{ height: `${barHeight}px` }}
-                      />
-                      {/* Month label e.g. "May" instead of raw number */}
-                      <span className="text-[10px] text-slate-600 group-hover:text-slate-400 transition">
-                        {m.label}
-                      </span>
-                    </div>
-                  );
-                })}
-              </div>
+              <ResponsiveContainer width="100%" height={160}>
+                <LineChart
+                  data={monthly}
+                  margin={{ top: 10, right: 10, left: 0, bottom: 0 }}
+                >
+                  {/* Gradient definition */}
+                  <defs>
+                    <linearGradient id="dashboardLineGrad" x1="0" y1="0" x2="1" y2="0">
+                      <stop offset="0%"   stopColor="#6366f1" />
+                      <stop offset="100%" stopColor="#8b5cf6" />
+                    </linearGradient>
+                  </defs>
+
+                  <CartesianGrid
+                    strokeDasharray="3 3"
+                    stroke="rgba(255,255,255,0.05)"
+                    vertical={false}
+                  />
+                  <XAxis
+                    dataKey="label"
+                    tick={{ fill: "#64748b", fontSize: 11 }}
+                    axisLine={false}
+                    tickLine={false}
+                  />
+                  <YAxis
+                    tick={{ fill: "#64748b", fontSize: 10 }}
+                    axisLine={false}
+                    tickLine={false}
+                    width={55}
+                    tickFormatter={(v) =>
+                      v >= 1000 ? `₱${(v / 1000).toFixed(0)}k` : `₱${v}`
+                    }
+                  />
+                  <Tooltip content={<CustomTooltip />} />
+                  <Line
+                    type="monotone"
+                    dataKey="total"
+                    stroke="url(#dashboardLineGrad)"
+                    strokeWidth={2.5}
+                    dot={{ fill: "#8b5cf6", r: 4, strokeWidth: 2, stroke: "#1e1b4b" }}
+                    activeDot={{ r: 6, fill: "#a78bfa", stroke: "#1e1b4b", strokeWidth: 2 }}
+                  />
+                </LineChart>
+              </ResponsiveContainer>
 
               {/* 6-month total */}
-              <p className="mt-3 text-right text-xs text-slate-600">
+              <p className="mt-2 text-right text-xs text-slate-600">
                 6-month total:{" "}
                 <span className="font-semibold text-slate-400">
                   {money(monthly.reduce((sum, m) => sum + m.total, 0))}
@@ -279,13 +304,9 @@ export default function AdminDashboard({ onNavigate }) {
           </button>
         </div>
 
-        {/* Table header */}
         <div className="mb-2 hidden grid-cols-4 gap-4 px-4 sm:grid">
           {["Student", "ID", "Balance", "Status"].map((h) => (
-            <p
-              key={h}
-              className="text-[10px] font-semibold uppercase tracking-widest text-slate-600"
-            >
+            <p key={h} className="text-[10px] font-semibold uppercase tracking-widest text-slate-600">
               {h}
             </p>
           ))}
@@ -306,21 +327,15 @@ export default function AdminDashboard({ onNavigate }) {
                 key={s.id}
                 className="grid grid-cols-1 gap-3 rounded-2xl border border-white/[0.05] bg-white/[0.02] px-4 py-3 transition hover:bg-white/[0.04] sm:grid-cols-4 sm:items-center"
               >
-                {/* Name + avatar */}
                 <div className="flex items-center gap-3">
                   <div className="flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-xl bg-gradient-to-br from-indigo-600 to-violet-600 text-sm font-bold text-white shadow-lg shadow-indigo-500/20">
                     {s.name.charAt(0)}
                   </div>
                   <p className="text-sm font-medium text-white">{s.name}</p>
                 </div>
-                {/* Student ID */}
                 <p className="text-xs font-mono text-slate-500">{s.student_id}</p>
-                {/* Balance */}
                 <p className="text-sm font-semibold text-white">{money(s.balance)}</p>
-                {/* Status */}
-                <span
-                  className={`inline-flex w-fit rounded-full border px-2.5 py-1 text-[10px] font-semibold ${STATUS_STYLES[s.status] || STATUS_STYLES.inactive}`}
-                >
+                <span className={`inline-flex w-fit rounded-full border px-2.5 py-1 text-[10px] font-semibold ${STATUS_STYLES[s.status] || STATUS_STYLES.inactive}`}>
                   {s.status}
                 </span>
               </div>
