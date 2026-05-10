@@ -397,30 +397,6 @@ export default function StudentFunds() {
           }
         </button>
       </form>
-
-      {/* Info section */}
-      <div className="rounded-2xl border border-slate-800 bg-slate-900 p-4 text-xs text-slate-400">
-        <p className="mb-2 text-sm font-medium text-slate-300">
-          {tab === "add" ? "How to Add Funds" : "Withdrawal Rules"}
-        </p>
-        {tab === "add" ? (
-          <ol className="list-inside list-decimal space-y-1">
-            <li>Select a fund source.</li>
-            <li>Enter the amount (numbers only, min ₱50).</li>
-            <li>Enter your account number or reference number.</li>
-            <li>Top-ups are credited instantly in this configuration.</li>
-            <li>Transactions appear immediately in your history.</li>
-          </ol>
-        ) : (
-          <ol className="list-inside list-decimal space-y-1">
-            <li>Minimum withdrawal is ₱50.</li>
-            <li>You cannot withdraw more than your current balance.</li>
-            <li>Enter your destination account number or reference.</li>
-            <li>Withdrawals create a pending transaction for admin approval.</li>
-            <li>If admin rejects it, your balance is restored automatically.</li>
-          </ol>
-        )}
-      </div>
     </div>
   );
 }
