@@ -1,8 +1,8 @@
 require("dotenv").config();
 
-const express = require("express");
-const cors    = require("cors");
-const helmet  = require("helmet");
+const express   = require("express");
+const cors      = require("cors");
+const helmet    = require("helmet");
 const rateLimit = require("express-rate-limit");
 const { connectDB } = require("./config/db");
 
@@ -18,31 +18,28 @@ const app = express();
 
 connectDB();
 
+// ── Trust Railway/Render proxy ────────────────────────────────
+// Required so express-rate-limit can correctly identify users
+// behind Railway's reverse proxy using X-Forwarded-For header
+app.set("trust proxy", 1);
+
 app.use(helmet());
 
 // ── Allowed origins ───────────────────────────────────────────
 const allowedOrigins = [
   "http://localhost:5173",
   "http://127.0.0.1:5173",
-  process.env.FRONTEND_URL,         // https://ucash-mu.vercel.app
-  process.env.FRONTEND_URL_PREVIEW, // optional extra slot in Railway variables
+  process.env.FRONTEND_URL,
+  process.env.FRONTEND_URL_PREVIEW,
 ].filter(Boolean);
 
 app.use(cors({
   origin: function (origin, callback) {
-    // Allow requests with no origin (Postman, mobile apps, curl)
     if (!origin) return callback(null, true);
-
-    // Allow exact match from allowedOrigins list
     if (allowedOrigins.includes(origin)) return callback(null, true);
-
-    // Allow ALL Vercel preview deployments for your project automatically
-    // Covers URLs like: https://ucash-abc123-rosellyassermartins-projects.vercel.app
     if (/^https:\/\/ucash-.*\.vercel\.app$/.test(origin)) {
       return callback(null, true);
     }
-
-    // Block everything else
     return callback(new Error(`CORS blocked for origin: ${origin}`));
   },
   credentials: true,
@@ -70,7 +67,7 @@ if (process.env.NODE_ENV === "production") {
     legacyHeaders: false,
     message: { success: false, message: "Too many auth attempts. Please wait 15 minutes." },
   });
-  app.use("/api/auth/login", authLimiter);
+  app.use("/api/auth/login",    authLimiter);
   app.use("/api/auth/register", authLimiter);
 }
 
