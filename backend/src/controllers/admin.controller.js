@@ -51,20 +51,21 @@ const getDashboardStats = async (req, res) => {
     // ── Monthly revenue for past 6 months ──────────────────
     // MySQL: DATE_SUB(NOW(), INTERVAL 6 MONTH)
     // PostgreSQL: NOW() - INTERVAL '6 months'
-    const { rows: monthly } = await pool.query(`
-      SELECT
-        EXTRACT(YEAR  FROM created_at) AS yr,
-        EXTRACT(MONTH FROM created_at) AS mo,
-        SUM(amount) AS total
-      FROM transactions
-      WHERE status = 'verified'
-        AND type = 'payment'
-        AND created_at >= NOW() - INTERVAL '6 months'
-      GROUP BY
-        EXTRACT(YEAR  FROM created_at),
-        EXTRACT(MONTH FROM created_at)
-      ORDER BY yr ASC, mo ASC
-    `);
+   // AFTER — cast to INT so yr=2024 and mo=5 (not 2024.0 and 5.0)
+const { rows: monthly } = await pool.query(`
+  SELECT
+    CAST(EXTRACT(YEAR  FROM created_at) AS INTEGER) AS yr,
+    CAST(EXTRACT(MONTH FROM created_at) AS INTEGER) AS mo,
+    SUM(amount) AS total
+  FROM transactions
+  WHERE status = 'verified'
+    AND type = 'payment'
+    AND created_at >= NOW() - INTERVAL '6 months'
+  GROUP BY
+    CAST(EXTRACT(YEAR  FROM created_at) AS INTEGER),
+    CAST(EXTRACT(MONTH FROM created_at) AS INTEGER)
+  ORDER BY yr ASC, mo ASC
+`);
 
     return res.json({
       success: true,

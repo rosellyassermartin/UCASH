@@ -12,7 +12,8 @@ const STATUS_STYLES = {
   inactive: "border-slate-500/30 bg-slate-500/10 text-slate-400",
 };
 
-// Stat card config
+const MONTH_NAMES = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
+
 const STAT_CARDS = (stats, loading) => [
   {
     label: "Total Revenue",
@@ -45,14 +46,15 @@ const STAT_CARDS = (stats, loading) => [
 ];
 
 export default function AdminDashboard({ onNavigate }) {
-  const [stats, setStats]             = useState(null);
-  const [pending, setPending]         = useState([]);
+  const [stats, setStats]                   = useState(null);
+  const [pending, setPending]               = useState([]);
   const [recentStudents, setRecentStudents] = useState([]);
-  const [loading, setLoading]         = useState(true);
-  const [error, setError]             = useState("");
+  const [loading, setLoading]               = useState(true);
+  const [error, setError]                   = useState("");
 
   const loadData = useCallback(async () => {
-    setLoading(true); setError("");
+    setLoading(true);
+    setError("");
     try {
       const [statsRes, txRes, studentsRes] = await Promise.all([
         adminAPI.getStats(),
@@ -64,7 +66,9 @@ export default function AdminDashboard({ onNavigate }) {
       setRecentStudents(studentsRes.students || []);
     } catch (err) {
       setError(err.message || "Could not load admin dashboard.");
-    } finally { setLoading(false); }
+    } finally {
+      setLoading(false);
+    }
   }, []);
 
   useEffect(() => {
@@ -74,8 +78,16 @@ export default function AdminDashboard({ onNavigate }) {
     return () => window.removeEventListener("ucash:data-changed", handler);
   }, [loadData]);
 
-  const monthly    = stats?.monthlyRevenue || [];
-  const maxRevenue = Math.max(...monthly.map((m) => Number(m.total || 0)), 1);
+  // Parse monthly data cleanly — convert all values to proper numbers
+  const monthly = (stats?.monthlyRevenue || []).map((m) => ({
+    yr:    parseInt(m.yr),
+    mo:    parseInt(m.mo),
+    total: parseFloat(m.total || 0),
+    label: MONTH_NAMES[parseInt(m.mo) - 1] ?? String(m.mo),
+  }));
+
+  // Calculate max AFTER parsing so it's always accurate
+  const maxRevenue = Math.max(...monthly.map((m) => m.total), 1);
   const statCards  = STAT_CARDS(stats, loading);
 
   return (
@@ -84,8 +96,12 @@ export default function AdminDashboard({ onNavigate }) {
       {/* Header */}
       <div className="flex items-center justify-between gap-4">
         <div>
-          <p className="text-xs font-semibold uppercase tracking-widest text-slate-500">Administration</p>
-          <h1 className="mt-1 text-2xl font-bold tracking-tight text-white sm:text-3xl">Overview</h1>
+          <p className="text-xs font-semibold uppercase tracking-widest text-slate-500">
+            Administration
+          </p>
+          <h1 className="mt-1 text-2xl font-bold tracking-tight text-white sm:text-3xl">
+            Overview
+          </h1>
         </div>
         <div className="flex items-center gap-2 rounded-2xl border border-white/[0.06] bg-white/[0.03] px-3 py-2 text-xs text-slate-400 backdrop-blur-sm">
           <span className="h-1.5 w-1.5 rounded-full bg-emerald-400 animate-pulse" />
@@ -93,6 +109,7 @@ export default function AdminDashboard({ onNavigate }) {
         </div>
       </div>
 
+      {/* Error */}
       {error && (
         <div className="flex items-center gap-3 rounded-2xl border border-red-500/20 bg-red-500/10 px-4 py-3 text-sm text-red-300">
           <span>⚠</span>{error}
@@ -102,10 +119,18 @@ export default function AdminDashboard({ onNavigate }) {
       {/* Stat Cards */}
       <div className="grid grid-cols-2 gap-4 xl:grid-cols-4">
         {statCards.map((s) => (
-          <div key={s.label} className={`relative overflow-hidden rounded-3xl border bg-gradient-to-br ${s.grad} p-5 backdrop-blur-sm`}>
-            <div className="pointer-events-none absolute -right-6 -top-6 h-24 w-24 rounded-full opacity-30 blur-2xl" style={{ background: "currentColor" }} />
+          <div
+            key={s.label}
+            className={`relative overflow-hidden rounded-3xl border bg-gradient-to-br ${s.grad} p-5 backdrop-blur-sm`}
+          >
+            <div
+              className="pointer-events-none absolute -right-6 -top-6 h-24 w-24 rounded-full opacity-30 blur-2xl"
+              style={{ background: "currentColor" }}
+            />
             <span className="text-2xl">{s.icon}</span>
-            <p className="mt-3 text-xl font-bold text-white">{loading ? "—" : s.value}</p>
+            <p className="mt-3 text-xl font-bold text-white">
+              {loading ? "—" : s.value}
+            </p>
             <p className={`mt-1 text-xs font-medium ${s.text}`}>{s.label}</p>
           </div>
         ))}
@@ -118,27 +143,65 @@ export default function AdminDashboard({ onNavigate }) {
         <div className="rounded-3xl border border-white/[0.07] bg-white/[0.02] p-5 backdrop-blur-sm">
           <div className="mb-5 flex items-center justify-between">
             <p className="font-semibold text-white">Monthly Revenue</p>
-            <button onClick={() => onNavigate("reports")} className="text-xs text-indigo-400 hover:text-indigo-300 transition">
+            <button
+              onClick={() => onNavigate("reports")}
+              className="text-xs text-indigo-400 hover:text-indigo-300 transition"
+            >
               Reports →
             </button>
           </div>
-          {monthly.length === 0 ? (
+
+          {loading ? (
+            // Skeleton bars while loading
+            <div className="flex h-36 items-end gap-1.5">
+              {[60, 80, 45, 90, 70, 55].map((h, i) => (
+                <div key={i} className="flex flex-1 flex-col items-center gap-1.5">
+                  <div
+                    className="w-full rounded-t-lg bg-white/[0.05] animate-pulse"
+                    style={{ height: `${h}px` }}
+                  />
+                  <span className="h-2 w-4 rounded bg-white/[0.05] animate-pulse" />
+                </div>
+              ))}
+            </div>
+          ) : monthly.length === 0 ? (
             <p className="text-sm text-slate-500">No revenue data yet.</p>
           ) : (
-            <div className="flex h-36 items-end gap-1.5">
-              {monthly.map((m) => {
-                const h = Math.max(4, (Number(m.total || 0) / maxRevenue) * 130);
-                return (
-                  <div key={`${m.yr}-${m.mo}`} className="group flex flex-1 flex-col items-center gap-1.5">
+            <>
+              <div className="flex h-36 items-end gap-1.5">
+                {monthly.map((m) => {
+                  // Clamp minimum height to 4px so zero months still show a sliver
+                  const barHeight = Math.max(4, (m.total / maxRevenue) * 130);
+                  return (
                     <div
-                      className="w-full rounded-t-lg bg-gradient-to-t from-indigo-600 to-violet-500 opacity-80 transition-all duration-300 group-hover:opacity-100"
-                      style={{ height: `${h}px` }}
-                    />
-                    <span className="text-[10px] text-slate-600 group-hover:text-slate-400 transition">{m.mo}</span>
-                  </div>
-                );
-              })}
-            </div>
+                      key={`${m.yr}-${m.mo}`}
+                      className="group relative flex flex-1 flex-col items-center gap-1.5"
+                    >
+                      {/* Tooltip on hover */}
+                      <div className="pointer-events-none absolute -top-8 left-1/2 -translate-x-1/2 whitespace-nowrap rounded-lg border border-white/10 bg-slate-800 px-2 py-1 text-[10px] text-white opacity-0 transition group-hover:opacity-100">
+                        {money(m.total)}
+                      </div>
+                      <div
+                        className="w-full rounded-t-lg bg-gradient-to-t from-indigo-600 to-violet-500 opacity-80 transition-all duration-300 group-hover:opacity-100"
+                        style={{ height: `${barHeight}px` }}
+                      />
+                      {/* Month label e.g. "May" instead of raw number */}
+                      <span className="text-[10px] text-slate-600 group-hover:text-slate-400 transition">
+                        {m.label}
+                      </span>
+                    </div>
+                  );
+                })}
+              </div>
+
+              {/* 6-month total */}
+              <p className="mt-3 text-right text-xs text-slate-600">
+                6-month total:{" "}
+                <span className="font-semibold text-slate-400">
+                  {money(monthly.reduce((sum, m) => sum + m.total, 0))}
+                </span>
+              </p>
+            </>
           )}
         </div>
 
@@ -153,36 +216,50 @@ export default function AdminDashboard({ onNavigate }) {
                 </span>
               )}
             </div>
-            <button onClick={() => onNavigate("transactions")} className="text-xs text-indigo-400 hover:text-indigo-300 transition">
+            <button
+              onClick={() => onNavigate("transactions")}
+              className="text-xs text-indigo-400 hover:text-indigo-300 transition"
+            >
               View all →
             </button>
           </div>
+
           {loading ? (
             <div className="space-y-2">
-              {[1,2,3].map(i => <div key={i} className="h-14 rounded-2xl bg-white/[0.03] animate-pulse" />)}
+              {[1, 2, 3].map((i) => (
+                <div key={i} className="h-14 rounded-2xl bg-white/[0.03] animate-pulse" />
+              ))}
             </div>
           ) : pending.length === 0 ? (
             <div className="flex flex-col items-center gap-2 py-6 text-center">
               <span className="text-3xl">✅</span>
-              <p className="text-sm text-slate-500">All caught up — no pending transactions.</p>
+              <p className="text-sm text-slate-500">
+                All caught up — no pending transactions.
+              </p>
             </div>
           ) : (
             <div className="space-y-2">
               {pending.map((tx) => (
                 <div
                   key={tx.id}
-                  className="flex items-center justify-between rounded-2xl border border-yellow-500/10 bg-yellow-500/5 px-4 py-3 transition hover:border-yellow-500/20 hover:bg-yellow-500/8"
+                  className="flex items-center justify-between rounded-2xl border border-yellow-500/10 bg-yellow-500/5 px-4 py-3 transition hover:border-yellow-500/20 hover:bg-yellow-500/[0.08]"
                 >
                   <div className="flex items-center gap-3">
                     <div className="flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-xl border border-yellow-500/20 bg-yellow-500/10 text-sm">
                       ⏳
                     </div>
                     <div className="min-w-0">
-                      <p className="truncate text-sm font-medium text-white">{tx.student_name}</p>
-                      <p className="truncate text-xs text-slate-500">{tx.description}</p>
+                      <p className="truncate text-sm font-medium text-white">
+                        {tx.student_name}
+                      </p>
+                      <p className="truncate text-xs text-slate-500">
+                        {tx.description}
+                      </p>
                     </div>
                   </div>
-                  <p className="ml-3 flex-shrink-0 text-sm font-bold text-white">{money(tx.amount)}</p>
+                  <p className="ml-3 flex-shrink-0 text-sm font-bold text-white">
+                    {money(tx.amount)}
+                  </p>
                 </div>
               ))}
             </div>
@@ -194,7 +271,10 @@ export default function AdminDashboard({ onNavigate }) {
       <div className="rounded-3xl border border-white/[0.07] bg-white/[0.02] p-5 backdrop-blur-sm">
         <div className="mb-5 flex items-center justify-between">
           <p className="font-semibold text-white">Recent Students</p>
-          <button onClick={() => onNavigate("students")} className="text-xs text-indigo-400 hover:text-indigo-300 transition">
+          <button
+            onClick={() => onNavigate("students")}
+            className="text-xs text-indigo-400 hover:text-indigo-300 transition"
+          >
             Manage all →
           </button>
         </div>
@@ -202,13 +282,20 @@ export default function AdminDashboard({ onNavigate }) {
         {/* Table header */}
         <div className="mb-2 hidden grid-cols-4 gap-4 px-4 sm:grid">
           {["Student", "ID", "Balance", "Status"].map((h) => (
-            <p key={h} className="text-[10px] font-semibold uppercase tracking-widest text-slate-600">{h}</p>
+            <p
+              key={h}
+              className="text-[10px] font-semibold uppercase tracking-widest text-slate-600"
+            >
+              {h}
+            </p>
           ))}
         </div>
 
         {loading ? (
           <div className="space-y-2">
-            {[1,2,3].map(i => <div key={i} className="h-14 rounded-2xl bg-white/[0.03] animate-pulse" />)}
+            {[1, 2, 3].map((i) => (
+              <div key={i} className="h-14 rounded-2xl bg-white/[0.03] animate-pulse" />
+            ))}
           </div>
         ) : recentStudents.length === 0 ? (
           <p className="text-sm text-slate-500">No students found.</p>
@@ -231,7 +318,9 @@ export default function AdminDashboard({ onNavigate }) {
                 {/* Balance */}
                 <p className="text-sm font-semibold text-white">{money(s.balance)}</p>
                 {/* Status */}
-                <span className={`inline-flex w-fit rounded-full border px-2.5 py-1 text-[10px] font-semibold ${STATUS_STYLES[s.status] || STATUS_STYLES.inactive}`}>
+                <span
+                  className={`inline-flex w-fit rounded-full border px-2.5 py-1 text-[10px] font-semibold ${STATUS_STYLES[s.status] || STATUS_STYLES.inactive}`}
+                >
                   {s.status}
                 </span>
               </div>
@@ -239,6 +328,7 @@ export default function AdminDashboard({ onNavigate }) {
           </div>
         )}
       </div>
+
     </div>
   );
 }
