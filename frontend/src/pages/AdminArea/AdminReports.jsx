@@ -1,26 +1,8 @@
+// src/pages/AdminArea/AdminReports.jsx
 import { useCallback, useEffect, useMemo, useState } from "react";
-import {
-  LineChart, Line, XAxis, YAxis, CartesianGrid,
-  Tooltip, ResponsiveContainer
-} from "recharts";
-import * as XLSX from "xlsx";
+import * as XLSX                from "xlsx";
 import { adminAPI, transactionAPI } from "../../api.js";
-
-const money = (v) =>
-  `₱${Number(v || 0).toLocaleString("en-PH", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
-
-const MONTH_NAMES = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
-
-// ── Custom tooltip ────────────────────────────────────────────
-const CustomTooltip = ({ active, payload, label }) => {
-  if (!active || !payload?.length) return null;
-  return (
-    <div className="rounded-xl border border-white/10 bg-slate-800/95 px-3 py-2 shadow-xl backdrop-blur-sm">
-      <p className="mb-1 text-xs font-semibold text-slate-400">{label}</p>
-      <p className="text-sm font-bold text-white">{money(payload[0].value)}</p>
-    </div>
-  );
-};
+import MonthlyRevenueChart      from "../../components/charts/MonthlyRevenueChart.jsx";
 
 export default function AdminReports() {
   const [loading,      setLoading]      = useState(false);
@@ -49,7 +31,7 @@ export default function AdminReports() {
   }, [loadData]);
 
   const feeBreakdown = useMemo(() => {
-    const map = { tuition: 0, lab: 0, library: 0, misc: 0 };
+    const map   = { tuition: 0, lab: 0, library: 0, misc: 0 };
     transactions
       .filter((tx) => tx.type === "payment" && tx.status === "verified")
       .forEach((tx) => {
@@ -66,29 +48,27 @@ export default function AdminReports() {
     ];
   }, [transactions]);
 
-  // Parse monthly data for Recharts — same structure as AdminDashboard
-  const monthly = (stats?.monthlyRevenue || []).map((m) => ({
-    yr:    parseInt(m.yr),
-    mo:    parseInt(m.mo),
-    total: parseFloat(m.total || 0),
-    label: MONTH_NAMES[parseInt(m.mo) - 1] ?? String(m.mo),
-  }));
-
-  // ── Excel export ──────────────────────────────────────────────
+  // ── Excel export (unchanged) ──────────────────────────────
   const exportExcel = () => {
     setLoading(true);
+
+    const monthly = (stats?.monthlyRevenue || []).map((m) => ({
+      label: ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"][parseInt(m.mo) - 1],
+      yr:    parseInt(m.yr),
+      total: parseFloat(m.total || 0),
+    }));
 
     const summaryData = [
       ["UCash – University of Cebu Payment System"],
       ["Financial Report"],
       ["Generated:", new Date().toLocaleString()],
       [],
-      ["Metric",                    "Value"],
-      ["Total Revenue (All Time)",  Number(stats?.totalRevenue         || 0)],
-      ["This Month's Revenue",      Number(stats?.monthRevenue         || 0)],
-      ["Verified Transactions",     Number(stats?.verifiedTransactions || 0)],
-      ["Pending Transactions",      Number(stats?.pendingTransactions  || 0)],
-      ["Active Students",           Number(stats?.activeStudents       || 0)],
+      ["Metric",                   "Value"],
+      ["Total Revenue (All Time)", Number(stats?.totalRevenue         || 0)],
+      ["This Month's Revenue",     Number(stats?.monthRevenue         || 0)],
+      ["Verified Transactions",    Number(stats?.verifiedTransactions || 0)],
+      ["Pending Transactions",     Number(stats?.pendingTransactions  || 0)],
+      ["Active Students",          Number(stats?.activeStudents       || 0)],
     ];
 
     const feeData = [
@@ -120,6 +100,8 @@ export default function AdminReports() {
 
   return (
     <div className="space-y-6 p-4 sm:p-6">
+
+      {/* Header */}
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <h1 className="text-2xl font-bold text-white">📄 Reports</h1>
         <button
@@ -155,69 +137,16 @@ export default function AdminReports() {
         ))}
       </div>
 
-      {/* Monthly Revenue Line Chart */}
+      {/* ── Monthly Revenue Chart (same shared component) ──── */}
       <div className="rounded-3xl border border-slate-800 bg-slate-900 p-5">
         <p className="mb-5 font-semibold text-white">📈 Monthly Revenue</p>
 
-        {monthly.length === 0 ? (
-          <div className="flex h-52 items-center justify-center">
-            <p className="text-sm text-slate-500">No revenue data yet.</p>
-          </div>
-        ) : (
-          <>
-            <ResponsiveContainer width="100%" height={200}>
-              <LineChart
-                data={monthly}
-                margin={{ top: 10, right: 10, left: 0, bottom: 0 }}
-              >
-                <defs>
-                  <linearGradient id="reportsLineGrad" x1="0" y1="0" x2="1" y2="0">
-                    <stop offset="0%"   stopColor="#6366f1" />
-                    <stop offset="100%" stopColor="#8b5cf6" />
-                  </linearGradient>
-                </defs>
-
-                <CartesianGrid
-                  strokeDasharray="3 3"
-                  stroke="rgba(255,255,255,0.05)"
-                  vertical={false}
-                />
-                <XAxis
-                  dataKey="label"
-                  tick={{ fill: "#64748b", fontSize: 11 }}
-                  axisLine={false}
-                  tickLine={false}
-                />
-                <YAxis
-                  tick={{ fill: "#64748b", fontSize: 10 }}
-                  axisLine={false}
-                  tickLine={false}
-                  width={60}
-                  tickFormatter={(v) =>
-                    v >= 1000 ? `₱${(v / 1000).toFixed(0)}k` : `₱${v}`
-                  }
-                />
-                <Tooltip content={<CustomTooltip />} />
-                <Line
-                  type="monotone"
-                  dataKey="total"
-                  stroke="url(#reportsLineGrad)"
-                  strokeWidth={2.5}
-                  dot={{ fill: "#8b5cf6", r: 4, strokeWidth: 2, stroke: "#0f172a" }}
-                  activeDot={{ r: 6, fill: "#a78bfa", stroke: "#0f172a", strokeWidth: 2 }}
-                />
-              </LineChart>
-            </ResponsiveContainer>
-
-            {/* Total below chart */}
-            <p className="mt-2 text-right text-xs text-slate-600">
-              6-month total:{" "}
-              <span className="font-semibold text-slate-400">
-                {money(monthly.reduce((sum, m) => sum + m.total, 0))}
-              </span>
-            </p>
-          </>
-        )}
+        {/* Exact same component as AdminDashboard — always in sync */}
+        <MonthlyRevenueChart
+          monthlyRevenue={stats?.monthlyRevenue}
+          loading={!stats}
+          height={220}
+        />
       </div>
 
       {/* Fee Collection Breakdown */}
@@ -230,16 +159,22 @@ export default function AdminReports() {
                 <span className="text-slate-300">{f.label}</span>
                 <div className="flex items-center gap-3">
                   <span className="text-xs text-slate-500">{f.pct}%</span>
-                  <span className="font-medium text-white">₱{Number(f.amount).toLocaleString()}</span>
+                  <span className="font-medium text-white">
+                    ₱{Number(f.amount).toLocaleString()}
+                  </span>
                 </div>
               </div>
               <div className="h-2 rounded-full bg-slate-800">
-                <div className={`h-2 rounded-full ${f.color}`} style={{ width: `${f.pct}%` }} />
+                <div
+                  className={`h-2 rounded-full ${f.color} transition-all duration-500`}
+                  style={{ width: `${f.pct}%` }}
+                />
               </div>
             </div>
           ))}
         </div>
       </div>
+
     </div>
   );
 }
