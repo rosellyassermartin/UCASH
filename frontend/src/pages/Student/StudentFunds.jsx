@@ -9,15 +9,11 @@ const METHODS = [
   { id: "metrobank", label: "Metrobank",  icon: "🏛️", color: "bg-amber-700" },
 ];
 
-// ── Amount validator ──────────────────────────────────────────
-// Blocks: letters, symbols, negative, empty, scientific notation,
-//         multiple dots, more than 2 decimal places
 const validateAmount = (value, { min = 50, max = 50000 } = {}) => {
   if (value === null || value === undefined || String(value).trim() === "") {
     return { valid: false, message: "Amount is required." };
   }
   const str = String(value).trim();
-  // Only allow plain digits with optional 1-2 decimal places
   if (!/^\d+(\.\d{1,2})?$/.test(str)) {
     return {
       valid: false,
@@ -37,23 +33,37 @@ const validateAmount = (value, { min = 50, max = 50000 } = {}) => {
   return { valid: true, message: "", parsed: num };
 };
 
+const validateAccountNum = (value) => {
+  if (!value || String(value).trim() === "") {
+    return { valid: false, message: "Account Number / Reference is required." };
+  }
+  if (String(value).trim().length < 3) {
+    return { valid: false, message: "Account Number / Reference is too short." };
+  }
+  if (String(value).trim().length > 100) {
+    return { valid: false, message: "Account Number / Reference is too long." };
+  }
+  return { valid: true, message: "" };
+};
+
 export default function StudentFunds() {
-  const [tab,        setTab]        = useState("add");
-  const [method,     setMethod]     = useState("gcash");
-  const [amount,     setAmount]     = useState("");
-  const [accountNum, setAccountNum] = useState("");
-  const [loading,    setLoading]    = useState(false);
-  const [success,    setSuccess]    = useState("");
-  const [error,      setError]      = useState("");
-  const [amountErr,  setAmountErr]  = useState(""); // inline amount error
-  const [balance,    setBalance]    = useState(0);
+  const [tab,           setTab]           = useState("add");
+  const [method,        setMethod]        = useState("gcash");
+  const [amount,        setAmount]        = useState("");
+  const [accountNum,    setAccountNum]    = useState("");
+  const [loading,       setLoading]       = useState(false);
+  const [success,       setSuccess]       = useState("");
+  const [error,         setError]         = useState("");
+  const [amountErr,     setAmountErr]     = useState("");
+  const [accountNumErr, setAccountNumErr] = useState("");
+  const [balance,       setBalance]       = useState(0);
 
   const loadBalance = useCallback(async () => {
     try {
       const res = await walletAPI.getBalance();
       setBalance(Number(res.balance || 0));
     } catch {
-      // ignore; form actions show precise errors
+      // ignore
     }
   }, []);
 
@@ -64,7 +74,6 @@ export default function StudentFunds() {
     return () => window.removeEventListener("ucash:data-changed", handler);
   }, [loadBalance]);
 
-  // Clear messages when switching tabs
   const switchTab = (t) => {
     setTab(t);
     setAmount("");
@@ -72,28 +81,34 @@ export default function StudentFunds() {
     setError("");
     setSuccess("");
     setAmountErr("");
+    setAccountNumErr("");
   };
 
-  // Validate on every keystroke so the user sees feedback immediately
   const handleAmountChange = (e) => {
     const val = e.target.value;
     setAmount(val);
     setSuccess("");
     setError("");
-
     if (val === "") {
       setAmountErr("");
       return;
     }
-
     const max   = tab === "withdraw" ? Math.min(balance, 50000) : 50000;
     const check = validateAmount(val, { min: 50, max });
+    setAmountErr(check.valid ? "" : check.message);
+  };
 
-    if (!check.valid) {
-      setAmountErr(check.message);
-    } else {
-      setAmountErr(""); // clear error when valid
+  const handleAccountNumChange = (e) => {
+    const val = e.target.value;
+    setAccountNum(val);
+    setSuccess("");
+    setError("");
+    if (val === "") {
+      setAccountNumErr("Account Number / Reference is required.");
+      return;
     }
+    const check = validateAccountNum(val);
+    setAccountNumErr(check.valid ? "" : check.message);
   };
 
   const submit = async (e) => {
@@ -101,35 +116,40 @@ export default function StudentFunds() {
     setError("");
     setSuccess("");
 
-    // ── Final validation before sending to API ────────────
-    const max   = tab === "withdraw" ? Math.min(balance, 50000) : 50000;
-    const check = validateAmount(amount, { min: 50, max });
+    const max         = tab === "withdraw" ? Math.min(balance, 50000) : 50000;
+    const amountCheck = validateAmount(amount, { min: 50, max });
 
-    if (!check.valid) {
-      setAmountErr(check.message);
-      return; // STOP — do not call the API
+    if (!amountCheck.valid) {
+      setAmountErr(amountCheck.message);
+      return;
     }
 
-    // Extra check for withdrawal: can't withdraw more than balance
-    if (tab === "withdraw" && check.parsed > balance) {
+    if (tab === "withdraw" && amountCheck.parsed > balance) {
       setAmountErr(
         `Insufficient balance. Your current balance is ₱${balance.toLocaleString("en-PH", { minimumFractionDigits: 2 })}.`
       );
       return;
     }
 
+    const accountCheck = validateAccountNum(accountNum);
+    if (!accountCheck.valid) {
+      setAccountNumErr(accountCheck.message);
+      return;
+    }
+
     setAmountErr("");
+    setAccountNumErr("");
     setLoading(true);
 
     try {
       if (tab === "add") {
-        const res = await walletAPI.topup(check.parsed, method, accountNum);
+        const res = await walletAPI.topup(amountCheck.parsed, method, accountNum);
         setSuccess(
-          `₱${check.parsed.toLocaleString("en-PH", { minimumFractionDigits: 2 })} added successfully. ` +
+          `₱${amountCheck.parsed.toLocaleString("en-PH", { minimumFractionDigits: 2 })} added successfully. ` +
           `New balance: ₱${Number(res.newBalance || 0).toLocaleString("en-PH", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
         );
       } else {
-        const res = await walletAPI.withdraw(check.parsed, method);
+        const res = await walletAPI.withdraw(amountCheck.parsed, method);
         setSuccess(
           `Withdrawal request submitted. ` +
           `New balance: ₱${Number(res.newBalance || 0).toLocaleString("en-PH", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
@@ -137,20 +157,24 @@ export default function StudentFunds() {
       }
       setAmount("");
       setAccountNum("");
+      setAmountErr("");
+      setAccountNumErr("");
       await loadBalance();
       window.dispatchEvent(new Event("ucash:data-changed"));
     } catch (err) {
-      // Show the exact error message from the backend
       setError(err.message || "Transaction failed.");
     } finally {
       setLoading(false);
     }
   };
 
-  const activeMethod = METHODS.find((m) => m.id === method);
-
-  // Disable submit button if amount is empty, has an error, or is loading
-  const isSubmitDisabled = loading || !amount || amountErr !== "";
+  const activeMethod     = METHODS.find((m) => m.id === method);
+  const isSubmitDisabled =
+    loading          ||
+    !amount          ||
+    amountErr !== "" ||
+    !accountNum.trim()    ||
+    accountNumErr !== "";
 
   return (
     <div className="space-y-6 p-4 sm:p-6">
@@ -220,19 +244,15 @@ export default function StudentFunds() {
             placeholder="Enter amount (e.g. 500)"
             className={`w-full rounded-2xl border px-4 py-3 text-sm text-white outline-none transition bg-slate-800 ${
               amountErr
-                ? "border-red-500 focus:border-red-400"   // red border when invalid
-                : "border-slate-700 focus:border-teal-500" // normal border
+                ? "border-red-500 focus:border-red-400"
+                : "border-slate-700 focus:border-teal-500"
             }`}
           />
-
-          {/* Inline amount error shown right below the input */}
           {amountErr && (
             <p className="mt-1.5 flex items-center gap-1.5 text-xs text-red-400">
               <span>⚠️</span> {amountErr}
             </p>
           )}
-
-          {/* Quick amount buttons */}
           <div className="mt-2 grid grid-cols-2 gap-2 sm:grid-cols-4">
             {[500, 1000, 2000, 5000].map((a) => (
               <button
@@ -240,7 +260,7 @@ export default function StudentFunds() {
                 type="button"
                 onClick={() => {
                   setAmount(String(a));
-                  setAmountErr(""); // preset amounts are always valid
+                  setAmountErr("");
                   setError("");
                   setSuccess("");
                 }}
@@ -250,8 +270,6 @@ export default function StudentFunds() {
               </button>
             ))}
           </div>
-
-          {/* Hint text shown when no error */}
           {!amountErr && (
             <p className="mt-1.5 text-xs text-slate-600">
               Min: ₱50 · Max: ₱{(tab === "withdraw" ? Math.min(balance, 50000) : 50000).toLocaleString()}
@@ -287,18 +305,28 @@ export default function StudentFunds() {
         <div>
           <label className="mb-2 block text-xs text-slate-400">
             {activeMethod?.label} Account Number / Reference
+            <span className="ml-1 text-red-400">*</span>
           </label>
           <input
             type="text"
             value={accountNum}
-            onChange={(e) => setAccountNum(e.target.value)}
+            onChange={handleAccountNumChange}
             placeholder={
               method === "bdo" || method === "metrobank"
                 ? "Account / reference number"
                 : "09XXXXXXXXX or reference no."
             }
-            className="w-full rounded-2xl border border-slate-700 bg-slate-800 px-4 py-3 text-sm text-white outline-none focus:border-teal-500"
+            className={`w-full rounded-2xl border px-4 py-3 text-sm text-white outline-none transition bg-slate-800 ${
+              accountNumErr
+                ? "border-red-500 focus:border-red-400"
+                : "border-slate-700 focus:border-teal-500"
+            }`}
           />
+          {accountNumErr && (
+            <p className="mt-1.5 flex items-center gap-1.5 text-xs text-red-400">
+              <span>⚠️</span> {accountNumErr}
+            </p>
+          )}
         </div>
 
         {/* Bank warning */}
@@ -336,6 +364,7 @@ export default function StudentFunds() {
           <ol className="list-inside list-decimal space-y-1">
             <li>Select a fund source.</li>
             <li>Enter the amount (numbers only, min ₱50).</li>
+            <li>Enter your account number or reference number.</li>
             <li>Top-ups are credited instantly in this configuration.</li>
             <li>Transactions appear immediately in your history.</li>
           </ol>
@@ -343,6 +372,7 @@ export default function StudentFunds() {
           <ol className="list-inside list-decimal space-y-1">
             <li>Minimum withdrawal is ₱50.</li>
             <li>You cannot withdraw more than your current balance.</li>
+            <li>Enter your destination account number or reference.</li>
             <li>Withdrawals create a pending transaction for admin approval.</li>
             <li>If admin rejects it, your balance is restored automatically.</li>
           </ol>
