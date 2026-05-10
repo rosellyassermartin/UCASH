@@ -17,7 +17,7 @@ const validateAmount = (value, { min = 50, max = 50000 } = {}) => {
   if (!/^\d+(\.\d{1,2})?$/.test(str)) {
     return {
       valid: false,
-      message: "Invalid amount. Numbers only (e.g. 500 or 500.50). No letters or symbols.",
+      message: "Invalid amount. Numbers only (e.g. 500 or 500.50).",
     };
   }
   const num = Number(str);
@@ -44,6 +44,32 @@ const validateAccountNum = (value) => {
     return { valid: false, message: "Account Number / Reference is too long." };
   }
   return { valid: true, message: "" };
+};
+
+// ── Blocks invalid keys on the amount input ───────────────────
+// Allowed: digits 0-9, one dot, Backspace, Delete, Tab, Arrow keys
+// Blocked: letters, minus/negative, +, e/E (scientific), spaces
+const handleAmountKeyDown = (e) => {
+  const allowed = [
+    "Backspace", "Delete", "Tab",
+    "ArrowLeft", "ArrowRight", "ArrowUp", "ArrowDown",
+    "Home", "End",
+  ];
+
+  // Always allow control keys
+  if (allowed.includes(e.key)) return;
+
+  // Allow Ctrl+A, Ctrl+C, Ctrl+V, Ctrl+X for copy/paste
+  if (e.ctrlKey || e.metaKey) return;
+
+  // Allow digits 0-9
+  if (/^\d$/.test(e.key)) return;
+
+  // Allow ONE dot — but only if there isn't one already in the value
+  if (e.key === "." && !e.target.value.includes(".")) return;
+
+  // Block everything else: letters, -, +, e, E, spaces, symbols
+  e.preventDefault();
 };
 
 export default function StudentFunds() {
@@ -86,15 +112,28 @@ export default function StudentFunds() {
 
   const handleAmountChange = (e) => {
     const val = e.target.value;
-    setAmount(val);
+
+    // Extra safety: strip anything that isn't a digit or dot
+    // This catches pasted values that bypass onKeyDown
+    const cleaned = val.replace(/[^0-9.]/g, "");
+
+    // If user pasted something with multiple dots, keep only first
+    const parts   = cleaned.split(".");
+    const safe    = parts.length > 2
+      ? parts[0] + "." + parts.slice(1).join("")
+      : cleaned;
+
+    setAmount(safe);
     setSuccess("");
     setError("");
-    if (val === "") {
+
+    if (safe === "") {
       setAmountErr("");
       return;
     }
+
     const max   = tab === "withdraw" ? Math.min(balance, 50000) : 50000;
-    const check = validateAmount(val, { min: 50, max });
+    const check = validateAmount(safe, { min: 50, max });
     setAmountErr(check.valid ? "" : check.message);
   };
 
@@ -170,10 +209,10 @@ export default function StudentFunds() {
 
   const activeMethod     = METHODS.find((m) => m.id === method);
   const isSubmitDisabled =
-    loading          ||
-    !amount          ||
-    amountErr !== "" ||
-    !accountNum.trim()    ||
+    loading            ||
+    !amount            ||
+    amountErr   !== "" ||
+    !accountNum.trim() ||
     accountNumErr !== "";
 
   return (
@@ -240,6 +279,7 @@ export default function StudentFunds() {
             type="text"
             inputMode="decimal"
             value={amount}
+            onKeyDown={handleAmountKeyDown}
             onChange={handleAmountChange}
             placeholder="Enter amount (e.g. 500)"
             className={`w-full rounded-2xl border px-4 py-3 text-sm text-white outline-none transition bg-slate-800 ${
@@ -253,6 +293,8 @@ export default function StudentFunds() {
               <span>⚠️</span> {amountErr}
             </p>
           )}
+
+          {/* Quick amount buttons */}
           <div className="mt-2 grid grid-cols-2 gap-2 sm:grid-cols-4">
             {[500, 1000, 2000, 5000].map((a) => (
               <button
@@ -270,6 +312,7 @@ export default function StudentFunds() {
               </button>
             ))}
           </div>
+
           {!amountErr && (
             <p className="mt-1.5 text-xs text-slate-600">
               Min: ₱50 · Max: ₱{(tab === "withdraw" ? Math.min(balance, 50000) : 50000).toLocaleString()}
